@@ -84,6 +84,12 @@ def get_split_features(blend, sw1, sw2, sw1_split, sw2_split, w1f, w2f, wsm, csm
     featureset['sw2_contrib'] = len(sw2_split)/len(blend)
     featureset['sw1_sw2_removal'] = (len(sw1)+len(sw2))/len(blend)
     featureset['splits'] = len(possible_splits)
+
+
+    sw1_splitp, sw2_splitp = 'V' if sw1[-1] in vowels else 'C', 'V' if sw2[0] in vowels else 'C'
+    featureset['split_point_cv'] = sw1_splitp + sw2_splitp
+
+    featureset['split_point_orthography'] = sw1[-1] + sw2[0]
     
     featureset['sw1_aff_c'] = w1f[0]
     featureset['sw1_N_c'] = w1f[1]

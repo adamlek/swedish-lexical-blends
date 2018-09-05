@@ -107,12 +107,12 @@ def load_all_data(overlap, remove=False, pos=False, sampa=False):
 
             if bl == current_blend:
                 featureset[-1].append(fset)
-                infoset[-1].append((bl, w1, w2, w1_split, w2_split))
+                infoset[-1].append((bl, w1, w2, w1_split, w2_split.rstrip()))
                 labelset[-1].append(label)
             else:
                 current_blend = bl
                 featureset.append([fset])
-                infoset.append([(bl, w1, w2, w1_split, w2_split)])
+                infoset.append([(bl, w1, w2, w1_split, w2_split.rstrip())])
                 labelset.append([label])
 
     return featureset, labelset, infoset
@@ -226,9 +226,13 @@ def ablation_experiment(dataset, test=False, remove=False, top_n=5, overlap=True
                             (3, 11), (4, 9), (5, 10)]
     elif strategy == 4:
         removal_strategy = [(18,21), (19,22), (20,23)]
+    elif strategy == 5:
+        removal_strategy = [(0,1,2,6,7,8,13,14,15,16,17,18,19,20,21,22,23,24,25,
+                             26,27,28,29,30,31,32)]
     else:
         # # features individually 
         removal_strategy = range(37)
+        #removal
 
     fdict = feature_indices()
     for k in removal_strategy:
@@ -250,18 +254,22 @@ def run_experiment_on_fold(features, labels, info, overlap=True, test=False, rem
     else:   
         dev_i = test
 
-    for i, (fs, lb) in enumerate(zip(features, labels)):
+    infoset = []
+
+    for i, (fs, lb, inf) in enumerate(zip(features, labels, info)):
         if i in dev_i:
+            infoset.append(inf)
             devX.append(fs)
             devY.append(lb)
         else:
             trainX += fs
             trainY += lb
+            
 
     # training
     model, FH = train_model(trainX, trainY, resample=False, epochs=1000)
     # testing
-    results = test_model(model, FH, devX, devY, top_n=top_n)
+    results = test_model(model, FH, devX, devY, infoset, top_n=top_n)
     return results
 
 def train_model(dataset, labelset, epochs=1000, resample=False, remove=False):
@@ -280,7 +288,7 @@ def train_model(dataset, labelset, epochs=1000, resample=False, remove=False):
 def test_model_classif():
     pass
 
-def test_model(model, FH, dataset, labelset, top_n=5, all_preds=False):
+def test_model(model, FH, dataset, labelset, infoset, top_n=5, all_preds=False):
     label_distribution = defaultdict(int)
     model_results = []
 
@@ -290,39 +298,31 @@ def test_model(model, FH, dataset, labelset, top_n=5, all_preds=False):
         blend_results = []
         _dataset = FH.fit_transform(ds)
         
-        for dp, lp in zip(_dataset, _labelset):
+        for j, (dp, lp) in enumerate(zip(_dataset, _labelset)):
             label_distribution[lp] += 1
             # select proba for class = True
             _, pred_true = model.predict_proba(dp)[0]
             
             ### all_classif
-            pred_label = model.predict(dp)[0]
-            all_pred.append(pred_label)
+            #pred_label = model.predict(dp)[0]
+            #all_pred.append(pred_label)
+            #all_gold.append(lp)
 
-            all_gold.append(lp)
-            blend_results.append((pred_true, lp))
+            blend_results.append((pred_true, lp, infoset[i][j][:3]))
 
         model_results.append(blend_results)
 
     ### all_classif
-    pr = metrics.precision_score(all_gold, all_pred)
-    re = metrics.recall_score(all_gold, all_pred)
-    fs = metrics.f1_score(all_gold, all_pred)
+    #pr = metrics.precision_score(all_gold, all_pred)
+    #re = metrics.recall_score(all_gold, all_pred)
+    #fs = metrics.f1_score(all_gold, all_pred)
     ### all_classif
-    return pr, re, fs
+    #return pr, re, fs
 
     #return eval_rank(model_results)
-    #return eval_regression(model_results, top_n, rank=True)
+    return eval_regression(model_results, top_n, rank=True)
 
 def mean_reciprocal_rank(rs):
-    """Score is reciprocal of the rank of the first relevant item
-    First element is 'rank 1'.  Relevance is binary (nonzero is relevant).
-    Args:
-        rs: Iterator of relevance scores (list or numpy) in rank order
-            (first element is the first item)
-    Returns:
-        Mean reciprocal rank
-    """
     rs = (np.asarray(r).nonzero()[0] for r in rs)
     return np.mean([1. / (r[0] + 1) if r.size else 0. for r in rs])
 
@@ -348,6 +348,13 @@ def eval_rank(results):
     #print(avgp, roc_curve)
     return avgp/len(results), roc_curve/len(results), mrr          
 
+def print_ranking(ranking, top_n, gold):
+    if isinstance(gold, list):
+        print('>>>', gold[0])
+    for i, r in enumerate(ranking[:top_n]):
+        print(i+1, r)
+    print()
+
 def eval_regression(results, selection, rank=True, avg=False):
     if rank:
         t, f = 0, 0
@@ -355,10 +362,13 @@ def eval_regression(results, selection, rank=True, avg=False):
             relevant = Counter([x[1] for x in result_set])[1]
             ranking = list(reversed(sorted(result_set)))
             ranking_selection = [x[1] for x in ranking[:selection]]
+            gold = [x for x in ranking if x[1] == True]
             if 1 in ranking_selection:
                 t += 1
             else:
                 f += 1
+            
+            print_ranking(ranking, selection, gold)
 
         return t, f, t/len(results)
     else:
@@ -372,9 +382,9 @@ def eval_regression(results, selection, rank=True, avg=False):
             rdict[1] += rankingd[0] # not relevant retrieved
             rdict[2] += gold_r[1]-rankingd[1] # relevant not retrieved
         
-        pr = rdict[0]/(rdict[2] + rdict[0])
-        re = rdict[0]/(rdict[1] + rdict[0])
-        #print(pr, re, 0)
+        re = rdict[0]/(rdict[2] + rdict[0])
+        pr = rdict[0]/(rdict[1] + rdict[0])
+        #print(pr, re, 0) 
         if pr+re == 0:
             return pr, re, 0
         else:
@@ -394,8 +404,8 @@ def eval_regression(results, selection, rank=True, avg=False):
         #     rdict[1] += rankingd[0] # not relevant retrieved
         #     rdict[2] += gold_r[1]-rankingd[1] # relevant not retrieved
         
-        # pr = rdict[0]/(rdict[2] + rdict[0])
-        # re = rdict[0]/(rdict[1] + rdict[0])
+        # re = rdict[0]/(rdict[2] + rdict[0])
+        # pr = rdict[0]/(rdict[1] + rdict[0])
         # print(pr, re, 0)
         # return pr, re, 2*((pr*re)/(pr+re))
 
@@ -409,8 +419,8 @@ if __name__ == '__main__':
 
     #print()
 
-    print(cross_val(2, overlap=True, verbose=True, top_n=3))
-    #ablation_experiment(2, overlap=False, top_n=10, strategy=4, all_s=True)
+    print(cross_val(2, overlap=True, verbose=False, top_n=3))
+    #ablation_experiment(2, overlap=False, top_n=10, strategy=6, all_s=True)
 
 
 
@@ -418,6 +428,7 @@ if __name__ == '__main__':
     #    print('i =', i)
     #    print(cross_val(3, overlap=True, verbose=False, top_n=i, all_s=True))
 
+    ######## SAVE DATA TO PICKLE; FASTER
     # features, labels, info = [], [], []
     # for boolean in [True, False]:
     #     f, l, i = load_all_data(boolean)

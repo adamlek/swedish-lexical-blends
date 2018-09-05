@@ -128,6 +128,13 @@ def get_split_features(blend, sw1, sw2, sw1_split, sw2_split, w1f, w2f, wsm, csm
     featureset['sw1_N_c'] = w1f[1]
     featureset['sw2_aff_c'] = w2f[0]
     featureset['sw2_N_c'] = w2f[1]
+
+    sw1_splitp, sw2_splitp = 'V' if sw1[-1] in vowels else 'C', 'V' if sw2[0] in vowels else 'C'
+    featureset['split_point_cv'] = sw1_splitp + sw2_splitp
+
+    featureset['split_point_orth_letters'] = sw1[-1] + sw2[0]
+
+    featureset['split_point_orth_semantics'] = csm.similarity(sw1[-1], sw2[0])
     
     return featureset
 
@@ -215,9 +222,10 @@ def write_features_to_csv():
                  'sw1_len', 'sw2_len', 
                  'sw1_contrib', 'sw2_contrib', 'sw1_sw2_removal', 
                  'sw1_aff_c', 'sw1_N_c', 'sw2_aff_c', 'sw2_N_c', 
+                 'sp1', 'sp2', 'sp3',
                  'LABEL', 'BLEND', 'CW1', 'CW2', 'CW1_split', 'CW2_split']
 
-    csvf = open('{0}_features_split_OVERLAP_fasttext_060818.csv'.format(lexicon), '+w', newline='')
+    csvf = open('overlap_splitp_040918.csv'.format(lexicon), '+w', newline='')
     csvw = csv.DictWriter(csvf, delimiter=',', fieldnames=col_names)
 
     T, F = 0, 0

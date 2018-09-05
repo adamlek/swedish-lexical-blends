@@ -35,7 +35,6 @@ def feature_indices():
         fdict[i] = f
     return fdict
 
-
 def ngram_embedding_repr(ngram, model):
     #return sum(reduce(lambda x, y: x*y, [model[x] for x in ngram]))
     return sum(reduce(lambda x, y: x*y, map(lambda x: model[x], ngram)))
